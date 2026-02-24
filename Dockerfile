@@ -110,3 +110,31 @@ USER 65534:65534
 EXPOSE 3000
 ENTRYPOINT ["zeroclaw"]
 CMD ["gateway"]
+
+# ── Stage 4: Cloud Runtime (Debian + entrypoint script) ──────
+# Use this stage for Dokploy / cloud deployments.
+# Generates config.toml from env vars at container start so secrets
+# are never baked into the image.  Has sh so Dokploy terminal works.
+FROM debian:trixie-slim AS cloud
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /app/zeroclaw /usr/local/bin/zeroclaw
+COPY --from=builder /zeroclaw-data /zeroclaw-data
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
+# Runtime env defaults (overridden by Dokploy env vars)
+ENV ZEROCLAW_WORKSPACE=/zeroclaw-data/workspace
+ENV HOME=/zeroclaw-data
+ENV PROVIDER="openrouter"
+ENV ZEROCLAW_GATEWAY_PORT=3000
+
+WORKDIR /zeroclaw-data
+USER 65534:65534
+EXPOSE 3000
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+CMD ["gateway"]
